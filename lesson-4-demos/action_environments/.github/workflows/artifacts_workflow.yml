@@ -11,31 +11,61 @@ on:
         required: true
         default: 'error.html'
 env:
-  BUCKET_NAME: website-artifacts
+  BUCKET_NAME: website-artifacts-2
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{secrets.AWS_SESSION_TOKEN}}
           aws-region: us-east-1
+      - name: Clean up old change sets
+        run: |
+          # Listar y eliminar change sets del stack
+          CHANGESETS=$(aws cloudformation list-change-sets \
+            --stack-name uda-artifact \
+            --query 'Summaries[*].ChangeSetName' \
+            --output text 2>/dev/null || echo "")
+          
+          for cs in $CHANGESETS; do
+            aws cloudformation delete-change-set \
+              --stack-name uda-artifact \
+              --change-set-name $cs || true
+          done
+        continue-on-error: true
+      - name: Show template content
+        run: |
+          echo "=== Template actual ==="
+          cat uda_artifact.yml
+          echo "=== Buscando 'website-artifacts' ==="
+          grep -i "bucket" uda_artifact.yml
+
       - name: Create CloudFormation Stack
-        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
         with:
           name: uda-artifact
           template: uda_artifact.yml
-          no-fail-on-empty-changeset: "1"
-          
+          fail-on-empty-changeset: "1"
+      
+      - name: Get bucket name from CloudFormation
+        id: get-bucket
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name uda-artifact \
+            --query 'Stacks[0].Outputs[?OutputKey==`ArtifactBucketName`].OutputValue' \
+            --output text)
+          echo "bucket_name=$BUCKET" >> $GITHUB_OUTPUT
+
       - name: Upload files to S3 bucket
         run: |
-          aws s3 cp ./website/${{ github.event.inputs.index_document }} s3://${{env.BUCKET_NAME}} 
-          aws s3 cp ./website/${{ github.event.inputs.error_document }} s3://${{env.BUCKET_NAME}} 
+          aws s3 cp ./website/${{ github.event.inputs.index_document }} s3://${{ steps.get-bucket.outputs.bucket_name }} 
+          aws s3 cp ./website/${{ github.event.inputs.error_document }} s3://${{ steps.get-bucket.outputs.bucket_name }} 
 
       - name: Show S3 bucket website URL
         run: |
