@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Create S3 bucket with parameters
 
 Resources:
-  UdaBucket:
+  ArtifactBucket:
     Type: AWS::S3::Bucket
     Properties:
       WebsiteConfiguration:
@@ -17,7 +17,6 @@ Outputs:
       Name: ArtifactBucketName
   ArtifactBucketWebsiteURL:
     Description: URL of the S3 bucket website
-    Value: !GetAtt UdaBucket.WebsiteURL
-  S3BucketSecureURL:
-    Value: !GetATT UdaBucket.DomainName
-    Description: Name of S2 bucket to hold website
+    Value: !GetAtt ArtifactBucket.WebsiteURL
+    Export:
+      Name: ArtifactBucketWebsiteURL
